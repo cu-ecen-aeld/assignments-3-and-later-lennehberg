@@ -1,4 +1,13 @@
 #include "systemcalls.h"
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/syslog.h>
+#include <sys/types.h>
+#include <syslog.h>
+#include <unistd.h>
+#include <wait.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -6,94 +15,159 @@
  *   successfully using the system() call, false if an error occurred,
  *   either in invocation of the system() call, or if a non-zero return
  *   value was returned by the command issued in @param cmd.
-*/
-bool do_system(const char *cmd)
-{
+ */
+bool do_system(const char *cmd) {
 
-/*
- * TODO  add your code here
- *  Call the system() function with the command set in the cmd
- *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
-*/
+  /*
+   * TODO  add your code here
+   *  Call the system() function with the command set in the cmd
+   *   and return a boolean true if the system() call completed with success
+   *   or false() if it returned a failure
+   */
+  // check if system is available
+  if (!system(NULL))
+    return false;
 
-    return true;
+  int ret = system(cmd);
+  // if the return status is -1, a child process could not
+  // be created,
+  // and if the return status is 127, then a utility
+  // in the cmd was not found
+  if (ret == -1 || ret == 127) {
+    return false;
+  }
+  return true;
 }
 
 /**
-* @param count -The numbers of variables passed to the function. The variables are command to execute.
-*   followed by arguments to pass to the command
-*   Since exec() does not perform path expansion, the command to execute needs
-*   to be an absolute path.
-* @param ... - A list of 1 or more arguments after the @param count argument.
-*   The first is always the full path to the command to execute with execv()
-*   The remaining arguments are a list of arguments to pass to the command in execv()
-* @return true if the command @param ... with arguments @param arguments were executed successfully
-*   using the execv() call, false if an error occurred, either in invocation of the
-*   fork, waitpid, or execv() command, or if a non-zero return value was returned
-*   by the command issued in @param arguments with the specified arguments.
-*/
+ * @param count -The numbers of variables passed to the function. The variables
+ * are command to execute. followed by arguments to pass to the command Since
+ * exec() does not perform path expansion, the command to execute needs to be an
+ * absolute path.
+ * @param ... - A list of 1 or more arguments after the @param count argument.
+ *   The first is always the full path to the command to execute with execv()
+ *   The remaining arguments are a list of arguments to pass to the command in
+ * execv()
+ * @return true if the command @param ... with arguments @param arguments were
+ * executed successfully using the execv() call, false if an error occurred,
+ * either in invocation of the fork, waitpid, or execv() command, or if a
+ * non-zero return value was returned by the command issued in @param arguments
+ * with the specified arguments.
+ */
 
-bool do_exec(int count, ...)
-{
-    va_list args;
-    va_start(args, count);
-    char * command[count+1];
-    int i;
-    for(i=0; i<count; i++)
-    {
-        command[i] = va_arg(args, char *);
+bool do_exec(int count, ...) {
+  va_list args;
+  va_start(args, count);
+  char *command[count + 1];
+  int i;
+  for (i = 0; i < count; i++) {
+    command[i] = va_arg(args, char *);
+  }
+  command[count] = NULL;
+  // this line is to avoid a compile warning before your implementation is
+  // complete and may be removed
+  command[count] = command[count];
+
+  /*
+   * TODO:
+   *   Execute a system command by calling fork, execv(),
+   *   and wait instead of system (see LSP page 161).
+   *   Use the command[0] as the full path to the command to execute
+   *   (first argument to execv), and use the remaining arguments
+   *   as second argument to the execv() command.
+   *
+   */
+
+  // if the first command does not start with /, then an absolute path
+  // is not provided, and path expansion is not performed
+  // DEBUG PRINT
+  openlog(NULL, LOG_CONS, LOG_USER);
+  printf("%s", command[0]);
+  syslog(LOG_DEBUG, "first char is %d", command[0][0] != '/');
+
+  // fork the process and get the id of the child / parent
+  pid_t fork_ret = fork();
+  if (fork_ret == -1) {
+    return false;
+  }
+
+  // if parent process, wait for child process
+  int status;
+  if (fork_ret != 0) {
+    if (waitpid(fork_ret, &status, 0) == -1) {
+      return false;
+    } else if (WIFEXITED(status)) {
+      return !WEXITSTATUS(status);
     }
-    command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+  }
+  // else execv the cmd in @param ...
+  else {
+    if (execv(command[0], command) == -1) {
+      // if execv returns, an error has occured and we can return false
+      exit(1);
+    }
+  }
 
-/*
- * TODO:
- *   Execute a system command by calling fork, execv(),
- *   and wait instead of system (see LSP page 161).
- *   Use the command[0] as the full path to the command to execute
- *   (first argument to execv), and use the remaining arguments
- *   as second argument to the execv() command.
- *
-*/
+  va_end(args);
 
-    va_end(args);
-
-    return true;
+  return true;
 }
 
 /**
-* @param outputfile - The full path to the file to write with command output.
-*   This file will be closed at completion of the function call.
-* All other parameters, see do_exec above
-*/
-bool do_exec_redirect(const char *outputfile, int count, ...)
-{
-    va_list args;
-    va_start(args, count);
-    char * command[count+1];
-    int i;
-    for(i=0; i<count; i++)
-    {
-        command[i] = va_arg(args, char *);
+ * @param outputfile - The full path to the file to write with command output.
+ *   This file will be closed at completion of the function call.
+ * All other parameters, see do_exec above
+ */
+bool do_exec_redirect(const char *outputfile, int count, ...) {
+  va_list args;
+  va_start(args, count);
+  char *command[count + 1];
+  int i;
+  for (i = 0; i < count; i++) {
+    command[i] = va_arg(args, char *);
+  }
+  command[count] = NULL;
+  // this line is to avoid a compile warning before your implementation is
+  // complete and may be removed
+  command[count] = command[count];
+
+  /*
+   * TODO
+   *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624
+   * as a refernce, redirect standard out to a file specified by outputfile. The
+   * rest of the behaviour is same as do_exec()
+   *
+   */
+
+  int fork_ret, status;
+  // open the output file for the redirection
+  int fd = open(outputfile, O_WRONLY | O_TRUNC | O_CREAT, 0644);
+  if (fd < 0) {
+    return false;
+  }
+
+  switch (fork_ret = fork()) {
+  case -1:
+    close(fd);
+    return false;
+  case 0:
+    if (dup2(fd, 1) < 0) {
+      close(fd);
+      return false;
     }
-    command[count] = NULL;
-    // this line is to avoid a compile warning before your implementation is complete
-    // and may be removed
-    command[count] = command[count];
+    close(fd);
+    if (execv(command[0], command) == -1) {
+      exit(1);
+    }
+  default:
+    close(fd);
+    if (waitpid(fork_ret, &status, 0) == -1) {
+      return false;
+    } else if (WIFEXITED(status)) {
+      return !WEXITSTATUS(status);
+    }
+  }
+  va_end(args);
 
-
-/*
- * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
- *   redirect standard out to a file specified by outputfile.
- *   The rest of the behaviour is same as do_exec()
- *
-*/
-
-    va_end(args);
-
-    return true;
+  return true;
 }
