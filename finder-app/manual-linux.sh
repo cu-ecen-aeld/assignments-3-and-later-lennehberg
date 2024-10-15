@@ -116,7 +116,7 @@ sudo mknod -m 666 dev/null c 1 3
 sudo mknod -m 666 dev/console c 1 5
 echo "cleaning writer artifacts..."
 # Clean and build the writer utility
-cd "${WRITER_DIR}"
+cd "${FINDER_APP_DIR}"
 if [ -e "writer.o" ]; then
   make clean
 fi
