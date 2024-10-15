@@ -5,6 +5,8 @@
 set -e
 set -u
 
+pwd
+
 OUTDIR=/tmp/aeld
 KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
 KERNEL_VERSION=v5.15.163
@@ -99,16 +101,13 @@ echo "${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter""
 # cp -r ${DEP_FILE} ${OUTDIR}/rootfs/lib/
 #done
 
-cp -r ${TOOLCHAIN_DIR}/libc/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib/
+cp -r ${FINDER_APP_DIR}/depends/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib/
 
 # Shared library dependencies
-LIB_DEPENDS=$(${CROSS_COMPILE}readelf -a /bin/busybox | grep "Shared library" | awk -F '[]:[]' '{print $3}')
-for DEP_FILE in $LIB_DEPENDS; do
-  echo "${DEP_FILE}"
-  # echo "copying ${DEP_FILE} from ${TOOLCHAIN_DIR} to rootfs"
-  cp -r ${TOOLCHAIN_DIR}/libc/lib64/${DEP_FILE} ${OUTDIR}/rootfs/lib64/
-done
-cp -r ${TOOLCHAIN_DIR}/libc/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64/libm.so.6
+cp -r ${FINDER_APP_DIR}/depends/libc.so.6 ${OUTDIR}/rootfs/lib64
+cp -r ${FINDER_APP_DIR}/depends/libresolv.so.2 ${OUTDIR}/rootfs/lib64
+cp -r ${FINDER_APP_DIR}/depends/libm.so.6 ${OUTDIR}/rootfs/lib64
+
 echo "Making device nodes..."
 # Make device nodes
 cd "${OUTDIR}/rootfs/"
